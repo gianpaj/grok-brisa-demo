@@ -1,3 +1,11 @@
-Place `terrace.jpg`, `lobby.jpg`, and `breeze.jpg` here (Mediterranean hotel stills used in the Moments section).
+# Hotel photography
 
-These were generated during the Grok App Builder session and are too large for the initial text push. Copy them from the local project at `public/images/` if you have them, or drop in any 16:9 / 3:2 hotel photography.
+Images are embedded as base64 data URIs in:
+
+- `src/lib/img-terrace.ts`
+- `src/lib/img-lobby.ts`
+- `src/lib/img-breeze.ts`
+
+(Web-optimized: max 1000px wide, JPEG quality ~50, ~43–48 KB each before encoding.)
+
+Optional: drop matching `terrace.jpg`, `lobby.jpg`, and `breeze.jpg` here if you prefer static public assets instead of the embedded modules.
