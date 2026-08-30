@@ -41,8 +41,8 @@ export function ForHotels() {
           ))}
         </ul>
         <div className="mt-12">
-          <a href="#how" className={cn(buttonVariants({ size: "lg" }))}>
-            See how it works
+          <a href="/demo" className={cn(buttonVariants({ size: "lg" }))}>
+            Open the desk
           </a>
         </div>
       </div>

@@ -8,7 +8,12 @@ export function Footer() {
           <Wordmark />
           <p className="mt-2 text-sm text-muted">The voice at the desk.</p>
         </div>
-        <p className="text-sm text-muted">© {new Date().getFullYear()} HelloBrisa</p>
+        <nav className="flex items-center gap-6 text-sm text-muted">
+          <a href="/demo" className="transition-colors hover:text-fg">
+            Desk
+          </a>
+          <span>© {new Date().getFullYear()} HelloBrisa</span>
+        </nav>
       </div>
     </footer>
   );

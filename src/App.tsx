@@ -7,9 +7,18 @@ import { Moments } from "@/components/landing/moments";
 import { ForHotels } from "@/components/landing/for-hotels";
 import { Cta } from "@/components/landing/cta";
 import { Footer } from "@/components/landing/footer";
+import { DeskPage } from "@/components/desk/desk";
+
+function pathOf() {
+  return window.location.pathname.replace(/\/$/, "") || "/";
+}
 
 export default function App() {
   const [talking, setTalking] = useState(false);
+
+  if (pathOf() === "/demo") {
+    return <DeskPage />;
+  }
 
   const openTalk = () => {
     setTalking(true);

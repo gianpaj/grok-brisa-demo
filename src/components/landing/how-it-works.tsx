@@ -34,6 +34,11 @@ export function HowItWorks() {
           </li>
         ))}
       </ol>
+      <p className="mt-12">
+        <a href="/demo" className="text-sm font-medium text-primary transition-colors hover:text-fg">
+          Open the desk
+        </a>
+      </p>
     </section>
   );
 }

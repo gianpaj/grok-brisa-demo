@@ -20,6 +20,9 @@ export function Nav({ onTalk }: NavProps) {
           <a href="#hotels" className="transition-colors hover:text-fg">
             For hotels
           </a>
+          <a href="/demo" className="transition-colors hover:text-fg">
+            Desk
+          </a>
         </nav>
         <div className="flex items-center gap-2 sm:gap-3">
           <Button size="sm" onClick={onTalk}>
