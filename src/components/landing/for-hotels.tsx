@@ -28,8 +28,9 @@ export function ForHotels() {
             Put Brisa on the front desk line.
           </h2>
           <p className="mt-5 max-w-xl text-[1.05rem] leading-relaxed text-muted">
-            HelloBrisa is the voice layer for independent hotels and small groups. She answers
-            every ring, books against your inventory, and leaves a record your team can trust.
+            HelloBrisa is the voice layer for independent hotels and small groups.
+            She answers every ring, books against your inventory, and leaves a
+            record your team can trust.
           </p>
         </div>
         <ul className="mt-14 grid gap-10 sm:grid-cols-3">
@@ -40,7 +41,7 @@ export function ForHotels() {
             </li>
           ))}
         </ul>
-        <div className="mt-12">
+        <div className="mt-12 flex flex-wrap items-center gap-3">
           <a href="/demo" className={cn(buttonVariants({ size: "lg" }))}>
             Open the desk
           </a>

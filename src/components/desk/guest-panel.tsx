@@ -56,8 +56,9 @@ export function GuestPanel({
         {booking ? (
           <dl className="mt-3 space-y-2 text-sm">
             <Row label="Status" value={bookingStatus(booking.status)} />
-            <Row label="Room" value={booking.room} />
             <Row label="Stay" value={`${booking.checkIn} → ${booking.checkOut}`} />
+            <Row label="Purpose" value={booking.purpose} />
+            <Row label="Room" value={booking.room} />
             <Row label="Nights" value={`${booking.nights} · party of ${booking.party}`} />
             <Row label="Rate" value={booking.rate} />
             <Row label="Ref" value={booking.confirmation} />

@@ -6,6 +6,7 @@ export function Moments() {
           src="/images/terrace.jpg"
           alt="Morning light on a quiet Mediterranean hotel terrace"
           className="aspect-[16/9] w-full object-cover"
+          crossOrigin="anonymous"
         />
       </figure>
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
@@ -14,6 +15,7 @@ export function Moments() {
             src="/images/lobby.jpg"
             alt="An empty boutique hotel reception in morning light"
             className="aspect-[3/2] w-full object-cover"
+            crossOrigin="anonymous"
           />
         </figure>
         <figure className="overflow-hidden rounded-[1.5rem] bg-sand shadow-[var(--shadow-border)]">
@@ -21,6 +23,7 @@ export function Moments() {
             src="/images/breeze.jpg"
             alt="Linen curtains lifting in a breeze at an open terrace door"
             className="aspect-[3/2] w-full object-cover"
+            crossOrigin="anonymous"
           />
         </figure>
       </div>

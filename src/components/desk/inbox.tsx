@@ -1,7 +1,7 @@
-import { Phone, MessageSquare, MessageCircle } from "lucide-react";
+import { BedDouble, Mail, MessageCircle, MessageSquare, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { channelLabel, initials, statusLabel } from "@/lib/desk/data";
-import type { Channel, Conversation, Guest, ThreadStatus } from "@/lib/desk/types";
+import { channelLabel, initials, stayLine, DESK_NOW, conversationPreview, langCode, type InboxRow } from "@/lib/desk/data";
+import type { Channel, ThreadStatus } from "@/lib/desk/types";
 
 export function ChannelIcon({
   channel,
@@ -13,6 +13,8 @@ export function ChannelIcon({
   const cls = cn("size-3.5", className);
   if (channel === "voice") return <Phone className={cls} strokeWidth={1.75} />;
   if (channel === "imessage") return <MessageCircle className={cls} strokeWidth={1.75} />;
+  if (channel === "email") return <Mail className={cls} strokeWidth={1.75} />;
+  if (channel === "booking") return <BedDouble className={cls} strokeWidth={1.75} />;
   if (channel === "whatsapp") {
     return (
       <svg
@@ -39,7 +41,7 @@ export function ChannelIcon({
 
 function timeLabel(iso: string): string {
   const d = new Date(iso);
-  const now = new Date("2026-08-30T10:39:00+02:00");
+  const now = new Date(DESK_NOW);
   const diff = now.getTime() - d.getTime();
   const mins = Math.max(0, Math.round(diff / 60000));
   if (mins < 60) return `${mins}m`;
@@ -49,28 +51,27 @@ function timeLabel(iso: string): string {
 }
 
 export function InboxList({
-  conversations,
-  guests,
-  selectedId,
+  rows,
+  selectedGuestId,
   onSelect,
+  showTranslation,
 }: {
-  conversations: Conversation[];
-  guests: Guest[];
-  selectedId: string;
-  onSelect: (id: string) => void;
+  rows: InboxRow[];
+  selectedGuestId: string;
+  onSelect: (conversationId: string) => void;
+  showTranslation: boolean;
 }) {
-  if (conversations.length === 0) {
+  if (rows.length === 0) {
     return <p className="px-4 py-10 text-sm text-muted">Nothing in this view.</p>;
   }
 
   return (
     <ul className="flex flex-col">
-      {conversations.map((c) => {
-        const guest = guests.find((g) => g.id === c.guestId);
-        if (!guest) return null;
-        const active = c.id === selectedId;
+      {rows.map((row) => {
+        const active = row.guest.id === selectedGuestId;
+        const c = row.latest;
         return (
-          <li key={c.id}>
+          <li key={row.guest.id}>
             <button
               type="button"
               onClick={() => onSelect(c.id)}
@@ -85,11 +86,11 @@ export function InboxList({
                   c.status === "live" ? "bg-primary text-primary-fg" : "bg-sand text-fg",
                 )}
               >
-                {initials(guest.name)}
+                {initials(row.guest.name)}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">{guest.name}</span>
+                  <span className="truncate text-sm font-medium">{row.guest.name}</span>
                   {c.unread && (
                     <span className="size-1.5 shrink-0 rounded-full bg-accent" aria-label="Unread" />
                   )}
@@ -97,9 +98,21 @@ export function InboxList({
                     {timeLabel(c.lastAt)}
                   </span>
                 </span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
-                  <ChannelIcon channel={c.channel} />
-                  <span>{channelLabel(c.channel)}</span>
+                <span className="mt-1 block truncate text-sm text-muted">
+                  {conversationPreview(c, showTranslation)}
+                </span>
+                <span className="mt-1 flex items-center gap-1.5 text-xs text-muted">
+                  <span className="flex items-center gap-1">
+                    {row.channels.map((ch) => (
+                      <ChannelIcon key={ch} channel={ch} />
+                    ))}
+                  </span>
+                  {c.lang !== "en" && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="tabular-nums">{langCode(c.lang)}</span>
+                    </>
+                  )}
                   <span aria-hidden="true">·</span>
                   {c.status === "live" ? (
                     <span className="live-bars text-primary" aria-hidden="true">
@@ -110,9 +123,8 @@ export function InboxList({
                   ) : (
                     <StatusDot status={c.status} />
                   )}
-                  <span>{statusLabel(c.status)}</span>
+                  <span className="truncate">{stayLine(row.guest)}</span>
                 </span>
-                <span className="mt-1 block truncate text-sm text-muted">{c.preview}</span>
               </span>
             </button>
           </li>
@@ -134,3 +146,5 @@ function StatusDot({ status }: { status: ThreadStatus }) {
     />
   );
 }
+
+export { channelLabel };

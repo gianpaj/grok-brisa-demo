@@ -11,8 +11,8 @@ export function Cta({ onTalk }: CtaProps) {
         Hear how she takes a booking.
       </h2>
       <p className="mx-auto mt-5 max-w-lg text-[1.05rem] leading-relaxed text-muted">
-        Talk to Brisa as a guest would — a weekend with a sea view, dinner on Saturday, whether
-        the pool is still open.
+        Talk to Brisa as a guest would — a weekend with a sea view, dinner on
+        Saturday, whether the pool is still open.
       </p>
       <div className="mt-8 flex justify-center">
         <Button size="lg" onClick={onTalk}>

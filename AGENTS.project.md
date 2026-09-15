@@ -101,7 +101,7 @@ src/routes/
   login.tsx          hotel sign-in
   __root.tsx         document shell — keep PreviewHostBridge + AuthProvider
 src/components/landing/   marketing + waveform + talk panel
-src/components/desk/      inbox, thread, compose, guest-panel
+src/components/desk/      inbox, thread, compose, guest-panel, approvals
 src/components/ui/        button (and more shadcn only if needed)
 src/lib/brisa/            voice: script, askBrisa, speakBrisa, audio
 src/lib/desk/             types, mock data, completeDeskReply
@@ -126,13 +126,16 @@ continuing work **in this workspace**; sync the export when asked.
 | `askBrisa` | `src/lib/brisa/actions.ts` | Talk panel — guest chat |
 | `speakBrisa` | same | TTS, voice `carina` |
 | `completeDeskReply` | `src/lib/desk/suggest.ts` | Desk **Complete** button only |
+| `translateDeskReply` | same | Desk **Translate** button only |
 
 - Model: `grok-4.5`
 - **User-initiated only.** No per-keystroke, no page-load, no polling loops
-- Cap tokens (chat ~180, complete ~90)
+- Cap tokens (chat ~180, complete ~90, translate ~120)
 - Degrade if the key is missing — never crash the UI
 - Tab-to-accept on the desk uses **local snippets** (`localSnippets` in
   `data.ts`); Complete may call Grok
+- Translate: local phrase map first (`localTranslate`), Grok only if the
+  draft is not a known snippet. Target is the thread’s `lang`.
 
 ### Auth
 
@@ -157,14 +160,23 @@ Casa Luz · Clara · Front desk · Sunday morning · 86% occupied
 
 ### Guests (demo)
 
-| Id | Name | Channel(s) | Status | Why they exist |
-| --- | --- | --- | --- | --- |
-| `g-sophie` | Sophie Laurent | voice | live | Incoming tonight; pending **hold sea double** |
-| `g-james` | James Okonkwo | SMS | needs_you | Late checkout; wants it **in writing** |
-| `g-marta` | Marta Ruiz | iMessage | needs_you | Parking + **boat** (pending); family, returning |
-| `g-elena` | Elena Voss | WhatsApp + voice | brisa / resolved | Weekend booked; two channels on one guest |
-| `g-david` | David Park | WhatsApp | brisa | Returning courtyard + spa |
-| `g-ana` | Ana Berg | SMS | resolved | Post-stay thank-you |
+One **inbox row per guest**. All of their channels sit on that row (voice, SMS,
+iMessage, WhatsApp, email, Booking.com). Agent mode on = Brisa handles the
+thread; off = Clara.
+
+| Id | Name | Channel(s) | Lang | Status | Why they exist |
+| --- | --- | --- | --- | --- | --- |
+| `g-sophie` | Sophie Laurent | voice | French | live | Incoming tonight; pending **hold sea double** |
+| `g-james` | James Okonkwo | SMS | English | needs_you | Late checkout; wants it **in writing** |
+| `g-marta` | Marta Ruiz | iMessage | Spanish | needs_you | Parking + **boat** + **table for four at eight** (pending); family, returning |
+| `g-helen` | Helen Cho | email | English | needs_you | Early check-in 08:00 |
+| `g-tomas` | Tomás Almeida | email | English | needs_you | Connecting rooms, family |
+| `g-jonas` | Jonas Weber | SMS | German | needs_you | In-house; street noise, wants a quieter room |
+| `g-luca` | Luca Moretti | Booking.com | English | brisa | OTA; add Sunday night |
+| `g-nora` | Nora Lind | Booking.com | English | brisa | OTA; airport car AGP 14:45 |
+| `g-elena` | Elena Voss | WhatsApp + voice | English | needs_you / resolved | Weekend booked; **taxi at nine** pending |
+| `g-david` | David Park | WhatsApp | English | brisa | Returning courtyard + spa |
+| `g-ana` | Ana Berg | SMS | English | resolved | Post-stay thank-you |
 
 **Clock for relative times:** treat “now” as `2026-08-30T10:39+02:00` in the
 inbox labels so the demo does not drift.
@@ -175,10 +187,19 @@ inbox labels so the demo does not drift.
   previous **stays**, current **booking**
 - **Booking** — room, dates, party, rate, extras, status
   `enquiry | held | confirmed | in-house`
-- **Conversation** — one channel thread: messages, **AiAction**s, snippets
-- **AiAction** — `fetch | hold | book | change | note`, `done | pending`
-  Pending ones show **Confirm** (Clara). Confirming updates booking/notes in
-  page state (`a-s2` Sophie hold → `CL-48501`; `a-ma2` Marta boat extra)
+- **Conversation** — one channel thread: messages, **AiAction**s, snippets.
+  Inbox is **guest-centric**: many conversations collapse to one row.
+  Channels: `voice | sms | imessage | whatsapp | email | booking`.
+  **`lang`**: `en | es | de | fr`. Brisa answers in that language. Snippets
+  stay in the desk language (English) so Clara can pick them.
+- **Message** — `text` is what was said (original). `textEn` is the English
+  for the desk when `lang` is not English.
+- **AiAction** — `fetch | hold | book | change | note`, `done | pending`.
+  Optional `type` (`RequestType`), `approver`, `approvedAt`.
+  Pending ones show **Confirm** (Clara). Confirming writes `approver: "Clara"`
+  (or `"Brisa"` if auto-approved) and `approvedAt`, and updates booking/notes
+  in page state (`a-s2` Sophie hold → `CL-48501`; `a-ma2` Marta boat;
+  `a-ma3` table Saturday 20:00; `a-e4` taxi 09:00 María Zambrano).
 
 A guest may have **several conversations**. The guest file lists all of them.
 
@@ -217,16 +238,54 @@ Until then: keep mocking. It is not a bug.
 Three panes, desktop: **inbox (left, ~18rem) · thread · guest file (right, ~20rem)**.
 Mobile: list → thread → guest file, back chevrons, 44px targets.
 
-- Filters: All / Needs you / Live (counts on the last two)
-- Jump in: Clara takes the line; banner “Brisa is listening”; replies actor
-  `desk`
+- View switch: **Inbox** / **Approvals** (manager log)
+- Filters: All / Needs you / Agent (Brisa handling)
+- Search guests, rooms, channels
+- **Agent mode**: on = Brisa handles; off = Clara. Sending a reply turns it off.
+- Jump in is the agent-off path on a live line
+- Guest with several channels: tabs on the thread (Elena = WhatsApp + Voice)
 - Live Sophie: after ~2.8s Brisa offers the sea double (`m-s3`) unless already
-  present. Spinner only while her last line contains “one moment”
-- Compose: chips from `snippets`; **Tab** accepts; **Complete** (Grok or
-  snippets); Enter sends (Shift+Enter newline)
+  present. Live bars while her last line contains “un instant” / “one moment”
+- Compose: chips from `snippets` (desk language, English); **Tab** accepts;
+  **Complete** (Grok or snippets); **Translate** (on non-English threads)
+  turns the draft into the guest’s language; Enter sends (Shift+Enter newline)
+- **Languages** icon at the top left of the inbox sidebar toggles original
+  vs English (`HOUSE.deskLang`). Default is original so Sophie/Marta/Jonas
+  read as they spoke. When on, bubbles show English with the original as a
+  caption; inbox previews follow. Search matches both languages.
 - Guest file: labels, flying-from, booking dl, editable notes (save on blur),
   conversations (clickable), previous stays
-- Confirming a pending action writes a desk bubble and mutates booking/notes
+- Confirming a pending action writes a bubble, records who signed and when,
+  and mutates booking/notes
+
+### Approvals (manager review)
+
+Logged guest requests live on `AiAction` (`src/lib/desk/types.ts`). The
+**Approvals** view is for the house manager (Clara’s lead, or a group manager
+later) — not a second product.
+
+- Every reviewable request (table, taxi, boat, spa, hold, late checkout, early
+  check-in, room move, extend, parking) appears on the log. Availability
+  fetches stay on the thread only.
+- **Waiting** vs **Signed**. Pending on a `needs_you` thread = Needs Clara;
+  pending on Brisa/live = Awaiting guest.
+- **Who signed** is `approver` (`Clara` | `Brisa`). **How long** is
+  `approvedAt − at` (pending uses `DESK_NOW` = Sunday 10:39).
+- A **gap** is an unsigned request waiting ≥ 45 minutes (`GAP_MINUTES`).
+  Jonas’s room move overnight, Elena’s taxi at nine, Nora’s airport car are
+  the teaching gaps. Typical desk sign-off is the median of Clara’s signed
+  waits (Elena’s table 7m, David’s spa 16m).
+- **Auto approve**: a `Set<RequestType>` in `demo.tsx` state, seeded with
+  `DEFAULT_AUTO_APPROVE` (`late_checkout`, `parking`). Toggle lives on the
+  request detail. Turning a type on signs current pending of that type as
+  Brisa and records them. Safe types skip the desk next time; the log still
+  keeps who signed. The list header shows `Auto: Late checkout · Parking`.
+- Demo beats: Marta **table for four at eight** (`a-ma3`, pending); Elena
+  **taxi at nine** (`a-e4`, pending). Confirm from the thread or the log.
+
+Helpers: `flattenApprovals`, `approvalSummary`, `waitLabel` in `data.ts`.
+UI: `src/components/desk/approvals.tsx`. Stay on mock data. Do not add a
+PMS or a second visual language.
 
 Landing links to `/demo` (nav Desk, how-it-works, for-hotels, footer). Keep
 those when you touch the marketing page.

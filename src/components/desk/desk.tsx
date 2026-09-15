@@ -1,31 +1,60 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, PanelRight } from "lucide-react";
+import { ArrowLeft, Languages, PanelRight, Search } from "lucide-react";
 import { Wordmark } from "@/components/landing/wordmark";
 import { InboxList } from "@/components/desk/inbox";
 import { Thread } from "@/components/desk/thread";
 import { GuestPanel } from "@/components/desk/guest-panel";
-import { CONVERSATIONS, GUESTS, HOUSE, guestById } from "@/lib/desk/data";
-import type { Conversation, Guest, ThreadStatus } from "@/lib/desk/types";
+import {
+  ApprovalDetail,
+  ApprovalList,
+  filterApprovalRows,
+  type ApprovalFilter,
+} from "@/components/desk/approvals";
+import {
+  CONVERSATIONS,
+  GUESTS,
+  HOUSE,
+  guestById,
+  inboxRows,
+  rowMatchesQuery,
+  flattenApprovals,
+  approvalSummary,
+  DEFAULT_AUTO_APPROVE,
+  DESK_NOW,
+  SOPHIE_HOLD_EN,
+  SOPHIE_HOLD_FR,
+  jumpInMessage,
+} from "@/lib/desk/data";
+import type { Actor, Conversation, Guest, RequestType, ThreadStatus } from "@/lib/desk/types";
 import { cn } from "@/lib/utils";
 
-type Filter = "all" | "needs_you" | "live";
+type Filter = "all" | "needs_you" | "agent";
 type MobilePane = "list" | "thread" | "guest";
+type DeskView = "inbox" | "approvals";
 
 export function DeskPage() {
-  const [conversations, setConversations] = useState<Conversation[]>(CONVERSATIONS);
-  const [guests, setGuests] = useState<Guest[]>(GUESTS);
-  const [selectedId, setSelectedId] = useState(CONVERSATIONS[0]!.id);
-  const [filter, setFilter] = useState<Filter>("all");
-  const [jumped, setJumped] = useState<Record<string, boolean>>({});
-  const [mobile, setMobile] = useState<MobilePane>("list");
-  const liveOnce = useRef(false);
-
   useEffect(() => {
     document.title = "Desk · HelloBrisa";
     return () => {
       document.title = "HelloBrisa";
     };
   }, []);
+
+  const [conversations, setConversations] = useState<Conversation[]>(CONVERSATIONS);
+  const [guests, setGuests] = useState<Guest[]>(GUESTS);
+  const [selectedId, setSelectedId] = useState(CONVERSATIONS[0]!.id);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const [jumped, setJumped] = useState<Record<string, boolean>>({});
+  const [mobile, setMobile] = useState<MobilePane>("list");
+  const [view, setView] = useState<DeskView>("inbox");
+  const [approvalFilter, setApprovalFilter] = useState<ApprovalFilter>("waiting");
+  const [selectedActionId, setSelectedActionId] = useState<string | null>(null);
+  const [autoTypes, setAutoTypes] = useState<Set<RequestType>>(
+    () => new Set(DEFAULT_AUTO_APPROVE),
+  );
+  const [showTranslation, setShowTranslation] = useState(false);
+  const liveOnce = useRef(false);
 
   useEffect(() => {
     if (liveOnce.current) return;
@@ -39,13 +68,14 @@ export function DeskPage() {
           return {
             ...c,
             lastAt: at,
-            preview: "I have a sea double free tonight…",
+            preview: SOPHIE_HOLD_FR,
             messages: [
               ...c.messages,
               {
                 id: "m-s3",
                 actor: "brisa" as const,
-                text: "I have a sea double free tonight — quiet, breakfast included. Shall I hold it for you?",
+                text: SOPHIE_HOLD_FR,
+                textEn: SOPHIE_HOLD_EN,
                 at,
               },
             ],
@@ -56,22 +86,48 @@ export function DeskPage() {
     return () => window.clearTimeout(t);
   }, []);
 
-  const filtered = useMemo(() => {
-    const list =
-      filter === "all"
-        ? conversations
-        : filter === "live"
-          ? conversations.filter((c) => c.status === "live")
-          : conversations.filter((c) => c.status === "needs_you");
-    return [...list].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
-  }, [conversations, filter]);
-
   const conversation =
     conversations.find((c) => c.id === selectedId) ?? conversations[0]!;
-  const guest = guestById(conversation.guestId, guests)!;
-  const jumpedIn = Boolean(jumped[conversation.id]);
+  const inboxGuest = guestById(conversation.guestId, guests)!;
+  const guestThreads = conversations.filter((c) => c.guestId === inboxGuest.id);
+  const agentOn =
+    !jumped[conversation.id] &&
+    (conversation.status === "live" || conversation.status === "brisa");
+
   const needsCount = conversations.filter((c) => c.status === "needs_you").length;
-  const liveCount = conversations.filter((c) => c.status === "live").length;
+  const agentCount = conversations.filter(
+    (c) =>
+      (c.status === "live" || c.status === "brisa") && !jumped[c.id],
+  ).length;
+
+  const approvalRows = useMemo(
+    () => flattenApprovals(conversations, guests),
+    [conversations, guests],
+  );
+  const summary = useMemo(() => approvalSummary(approvalRows), [approvalRows]);
+  const visibleApprovals = useMemo(
+    () => filterApprovalRows(approvalRows, approvalFilter),
+    [approvalRows, approvalFilter],
+  );
+  const selectedApproval =
+    approvalRows.find((r) => r.action.id === selectedActionId) ??
+    (view === "approvals" ? visibleApprovals[0] ?? null : null);
+
+  const guest =
+    view === "approvals" && selectedApproval
+      ? guestById(selectedApproval.guest.id, guests) ?? inboxGuest
+      : inboxGuest;
+
+  const rows = useMemo(() => {
+    let list = conversations;
+    if (filter === "needs_you") list = list.filter((c) => c.status === "needs_you");
+    if (filter === "agent") {
+      list = list.filter(
+        (c) => (c.status === "live" || c.status === "brisa") && !jumped[c.id],
+      );
+    }
+    return inboxRows(list, guests).filter((row) => rowMatchesQuery(row, query));
+  }, [conversations, guests, filter, query, jumped]);
 
   const select = (id: string) => {
     setSelectedId(id);
@@ -81,33 +137,50 @@ export function DeskPage() {
     );
   };
 
-  const jump = () => {
-    setJumped((j) => ({ ...j, [conversation.id]: true }));
-    if (conversation.status !== "live") return;
-    const now = new Date().toISOString();
+  const toggleAgent = () => {
+    if (agentOn) {
+      setJumped((j) => ({ ...j, [conversation.id]: true }));
+      if (conversation.status === "live" || conversation.status === "brisa") {
+        const now = new Date().toISOString();
+        const jump = jumpInMessage(conversation.lang);
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== conversation.id) return c;
+            if (c.messages.some((m) => m.actor === "desk")) {
+              return { ...c, status: "needs_you" as ThreadStatus };
+            }
+            return {
+              ...c,
+              status: "needs_you" as ThreadStatus,
+              lastAt: now,
+              preview: jump.text,
+              messages: [
+                ...c.messages,
+                {
+                  id: `m-jump-${now}`,
+                  actor: "desk" as const,
+                  text: jump.text,
+                  textEn: jump.textEn,
+                  at: now,
+                },
+              ],
+            };
+          }),
+        );
+      }
+      return;
+    }
+    setJumped((j) => ({ ...j, [conversation.id]: false }));
     setConversations((prev) =>
-      prev.map((c) => {
-        if (c.id !== conversation.id) return c;
-        if (c.messages.some((m) => m.actor === "desk")) return c;
-        return {
-          ...c,
-          lastAt: now,
-          preview: "Clara at the desk — I’m on the line with you.",
-          messages: [
-            ...c.messages,
-            {
-              id: `m-jump-${now}`,
-              actor: "desk" as const,
-              text: "Clara at the desk — I’m on the line with you.",
-              at: now,
-            },
-          ],
-        };
-      }),
+      prev.map((c) =>
+        c.id === conversation.id
+          ? { ...c, status: conversation.status === "live" ? c.status : ("brisa" as ThreadStatus) }
+          : c,
+      ),
     );
   };
 
-  const send = (text: string) => {
+  const send = (text: string, textEn?: string) => {
     const now = new Date().toISOString();
     setJumped((j) => ({ ...j, [conversation.id]: true }));
     setConversations((prev) =>
@@ -121,42 +194,49 @@ export function DeskPage() {
           unread: false,
           messages: [
             ...c.messages,
-            { id: `m-${now}`, actor: "desk" as const, text, at: now },
+            { id: `m-${now}`, actor: "desk" as const, text, textEn, at: now },
           ],
         };
       }),
     );
   };
 
-  const confirmAction = (actionId: string) => {
-    const now = new Date().toISOString();
-    const action = conversation.actions.find((a) => a.id === actionId);
+  const confirmActions = (actionIds: string[], approver: string = HOUSE.desk) => {
+    if (actionIds.length === 0) return;
+    const now = DESK_NOW;
+    const idSet = new Set(actionIds);
     setConversations((prev) =>
       prev.map((c) => {
-        if (c.id !== conversation.id) return c;
-        const done = c.actions.map((a) =>
-          a.id === actionId ? { ...a, status: "done" as const } : a,
+        const hits = c.actions.filter((a) => idSet.has(a.id) && a.status === "pending");
+        if (hits.length === 0) return c;
+        const actions = c.actions.map((a) =>
+          idSet.has(a.id) && a.status === "pending"
+            ? { ...a, status: "done" as const, approver, approvedAt: now }
+            : a,
         );
-        const note = action
-          ? {
-              id: `m-act-${now}`,
-              actor: "desk" as const,
-              text: `Confirmed: ${action.label}.`,
-              at: now,
-            }
-          : null;
+        const notes = hits.map((action) => ({
+          id: `m-act-${action.id}-${now}`,
+          actor: (approver === "Brisa" ? "brisa" : "desk") as Actor,
+          text: `Confirmed: ${action.label}.`,
+          at: now,
+        }));
         return {
           ...c,
-          actions: done,
-          messages: note ? [...c.messages, note] : c.messages,
+          actions,
+          lastAt: now,
+          preview: notes.at(-1)?.text ?? c.preview,
+          messages: [...c.messages, ...notes],
         };
       }),
     );
 
-    if (actionId === "a-s2") {
-      setGuests((prev) =>
-        prev.map((g) => {
-          if (g.id !== "g-sophie") return g;
+    const patchGuest = (id: string, fn: (g: Guest) => Guest) => {
+      setGuests((prev) => prev.map((g) => (g.id === id ? fn(g) : g)));
+    };
+
+    for (const actionId of actionIds) {
+      if (actionId === "a-s2") {
+        patchGuest("g-sophie", (g) => {
           const labels = g.labels.includes("Held") ? g.labels : [...g.labels, "Held"];
           return {
             ...g,
@@ -171,16 +251,15 @@ export function DeskPage() {
               rate: "€260 / night, breakfast included",
               extras: ["Breakfast"],
               status: "held",
+              purpose: "Tonight",
             },
           };
-        }),
-      );
-    }
+        });
+      }
 
-    if (actionId === "a-ma2") {
-      setGuests((prev) =>
-        prev.map((g) => {
-          if (g.id !== "g-marta" || !g.booking) return g;
+      if (actionId === "a-ma2") {
+        patchGuest("g-marta", (g) => {
+          if (!g.booking) return g;
           const extras = g.booking.extras.includes("Boat Saturday 10:00")
             ? g.booking.extras
             : [...g.booking.extras, "Boat Saturday 10:00"];
@@ -191,9 +270,113 @@ export function DeskPage() {
               : `${g.notes} Boat held Saturday 10:00.`,
             booking: { ...g.booking, extras },
           };
-        }),
+        });
+      }
+
+      if (actionId === "a-ma3") {
+        patchGuest("g-marta", (g) => {
+          if (!g.booking) return g;
+          const extras = g.booking.extras.includes("Table Saturday 20:00")
+            ? g.booking.extras
+            : [...g.booking.extras, "Table Saturday 20:00"];
+          return { ...g, booking: { ...g.booking, extras } };
+        });
+      }
+
+      if (actionId === "a-h2") {
+        patchGuest("g-helen", (g) => {
+          if (!g.booking) return g;
+          const extras = g.booking.extras.includes("Early check-in 08:00")
+            ? g.booking.extras
+            : ["Early check-in 08:00"];
+          return { ...g, booking: { ...g.booking, extras } };
+        });
+      }
+
+      if (actionId === "a-l2") {
+        patchGuest("g-luca", (g) => {
+          if (!g.booking) return g;
+          return {
+            ...g,
+            booking: {
+              ...g.booking,
+              checkOut: "Mon 7 Sep",
+              nights: 3,
+            },
+          };
+        });
+      }
+
+      if (actionId === "a-n1") {
+        patchGuest("g-nora", (g) => {
+          if (!g.booking) return g;
+          return {
+            ...g,
+            booking: {
+              ...g.booking,
+              extras: ["Airport car AGP 14:45"],
+            },
+          };
+        });
+      }
+
+      if (actionId === "a-e4") {
+        patchGuest("g-elena", (g) => {
+          if (!g.booking) return g;
+          const extras = g.booking.extras.includes("Taxi 09:00 María Zambrano")
+            ? g.booking.extras
+            : [...g.booking.extras, "Taxi 09:00 María Zambrano"];
+          return { ...g, booking: { ...g.booking, extras } };
+        });
+      }
+
+      if (actionId === "a-jo2") {
+        patchGuest("g-jonas", (g) => {
+          if (!g.booking) return g;
+          return {
+            ...g,
+            notes: "Moved to courtyard king after breakfast.",
+            booking: { ...g.booking, room: "Courtyard king" },
+          };
+        });
+      }
+    }
+  };
+
+  const confirmAction = (actionId: string) => confirmActions([actionId], HOUSE.desk);
+
+  const toggleAuto = (type: RequestType) => {
+    const enabling = !autoTypes.has(type);
+    setAutoTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+    if (!enabling) return;
+    const pendingIds = conversations.flatMap((c) =>
+      c.actions
+        .filter((a) => a.status === "pending" && a.type === type)
+        .map((a) => a.id),
+    );
+    confirmActions(pendingIds, "Brisa");
+  };
+
+  const openApproval = (actionId: string) => {
+    setSelectedActionId(actionId);
+    const row = approvalRows.find((r) => r.action.id === actionId);
+    if (row) {
+      setSelectedId(row.conversation.id);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === row.conversation.id ? { ...c, unread: false } : c)),
       );
     }
+    setMobile("thread");
+  };
+
+  const openThread = (conversationId: string) => {
+    setView("inbox");
+    select(conversationId);
   };
 
   const saveNotes = (notes: string) => {
@@ -205,55 +388,143 @@ export function DeskPage() {
       <div className="flex min-h-0 flex-1">
         <aside
           className={cn(
-            "w-full shrink-0 flex-col border-r border-line bg-surface lg:flex lg:w-72",
+            "w-full shrink-0 flex-col border-r border-line bg-surface lg:flex lg:w-80",
             mobile === "list" ? "flex" : "hidden lg:flex",
           )}
         >
-          <div className="flex h-14 items-center justify-between border-b border-line px-4">
-            <Wordmark />
-            <a href="/" className="text-xs text-muted hover:text-fg">
+          <div className="flex h-14 items-center justify-between gap-2 border-b border-line px-2 sm:px-3">
+            <div className="flex min-w-0 items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setShowTranslation((v) => !v)}
+                className={cn(
+                  "flex h-11 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition-colors",
+                  showTranslation
+                    ? "bg-primary text-primary-fg shadow-[var(--shadow-border)]"
+                    : "text-muted hover:text-fg",
+                )}
+                aria-pressed={showTranslation}
+                aria-label={
+                  showTranslation
+                    ? "Show original languages"
+                    : "Show English translations"
+                }
+                title={
+                  showTranslation
+                    ? "Show original languages"
+                    : "Show English translations"
+                }
+              >
+                <Languages className="size-4" strokeWidth={1.75} />
+                {showTranslation ? HOUSE.deskLang.toUpperCase() : null}
+              </button>
+              <Wordmark />
+            </div>
+            <a href="/" className="shrink-0 px-2 text-xs text-muted hover:text-fg">
               Site
             </a>
           </div>
           <div className="border-b border-line px-4 py-3">
             <p className="text-sm font-medium">{HOUSE.name}</p>
             <p className="text-xs text-muted">
-              {HOUSE.desk} · {HOUSE.role}
+              {view === "approvals"
+                ? `Requests · ${HOUSE.desk} · ${HOUSE.occupancy} occupied`
+                : `One inbox · ${HOUSE.desk} · ${HOUSE.occupancy} occupied`}
             </p>
-            <p className="mt-1 text-xs text-muted">
-              {HOUSE.when} · {HOUSE.occupancy} occupied
-            </p>
+            <div className="mt-3 flex gap-1">
+              {(
+                [
+                  ["inbox", "Inbox", 0],
+                  ["approvals", "Approvals", summary.desk],
+                ] as const
+              ).map(([id, label, count]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setView(id);
+                    setMobile("list");
+                    if (id === "approvals") {
+                      const row =
+                        (selectedActionId
+                          ? approvalRows.find((r) => r.action.id === selectedActionId)
+                          : null) ?? visibleApprovals[0];
+                      if (row) {
+                        setSelectedActionId(row.action.id);
+                        setSelectedId(row.conversation.id);
+                      }
+                    }
+                  }}
+                  className={cn(
+                    "h-11 rounded-full px-3 text-xs font-medium",
+                    view === id ? "bg-fg text-bg" : "text-muted hover:text-fg",
+                  )}
+                >
+                  {label}
+                  {id === "approvals" && count > 0 ? ` ${count}` : ""}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex gap-1 px-3 py-2">
-            {(
-              [
-                ["all", "All", 0],
-                ["needs_you", "Needs you", needsCount],
-                ["live", "Live", liveCount],
-              ] as const
-            ).map(([id, label, count]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setFilter(id)}
-                className={cn(
-                  "h-11 rounded-full px-3 text-xs font-medium",
-                  filter === id ? "bg-fg text-bg" : "text-muted hover:text-fg",
-                )}
-              >
-                {label}
-                {id !== "all" && count > 0 ? ` ${count}` : ""}
-              </button>
-            ))}
-          </div>
-          <div className="desk-scroll min-h-0 flex-1 overflow-y-auto">
-            <InboxList
-              conversations={filtered}
-              guests={guests}
-              selectedId={conversation.id}
-              onSelect={select}
+          {view === "inbox" ? (
+            <>
+              <div className="border-b border-line px-3 py-2">
+                <label className="sr-only" htmlFor="inbox-search">
+                  Search guests
+                </label>
+                <div className="flex h-11 items-center gap-2 rounded-xl bg-bg px-3 shadow-[var(--shadow-border)] focus-within:shadow-[var(--shadow-border-hover)]">
+                  <Search className="size-4 text-muted" strokeWidth={1.75} />
+                  <input
+                    id="inbox-search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search guests, rooms, channels…"
+                    className="min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-muted"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-1 px-3 py-2">
+                {(
+                  [
+                    ["all", "All", 0],
+                    ["needs_you", "Needs you", needsCount],
+                    ["agent", "Agent", agentCount],
+                  ] as const
+                ).map(([id, label, count]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setFilter(id)}
+                    className={cn(
+                      "h-11 rounded-full px-3 text-xs font-medium",
+                      filter === id ? "bg-fg text-bg" : "text-muted hover:text-fg",
+                    )}
+                  >
+                    {label}
+                    {id !== "all" && count > 0 ? ` ${count}` : ""}
+                  </button>
+                ))}
+              </div>
+              <div className="desk-scroll min-h-0 flex-1 overflow-y-auto">
+                <InboxList
+                  rows={rows}
+                  selectedGuestId={guest.id}
+                  onSelect={select}
+                  showTranslation={showTranslation}
+                />
+              </div>
+            </>
+          ) : (
+            <ApprovalList
+              rows={visibleApprovals}
+              selectedId={selectedApproval?.action.id ?? null}
+              onSelect={openApproval}
+              autoTypes={autoTypes}
+              filter={approvalFilter}
+              onFilter={setApprovalFilter}
+              summary={summary}
             />
-          </div>
+          )}
         </aside>
 
         <section
@@ -267,11 +538,15 @@ export function DeskPage() {
               type="button"
               className="flex size-11 items-center justify-center text-fg"
               onClick={() => setMobile("list")}
-              aria-label="Back to inbox"
+              aria-label={view === "approvals" ? "Back to requests" : "Back to inbox"}
             >
               <ArrowLeft className="size-5" strokeWidth={1.75} />
             </button>
-            <span className="flex-1 truncate text-sm font-medium">{guest.name}</span>
+            <span className="flex-1 truncate text-sm font-medium">
+              {view === "approvals"
+                ? (selectedApproval?.action.label ?? "Request")
+                : guest.name}
+            </span>
             <button
               type="button"
               className="flex size-11 items-center justify-center text-fg"
@@ -282,14 +557,27 @@ export function DeskPage() {
             </button>
           </div>
           <div className="min-h-0 flex-1">
-            <Thread
-              conversation={conversation}
-              guest={guest}
-              jumpedIn={jumpedIn}
-              onJump={jump}
-              onSend={send}
-              onConfirmAction={confirmAction}
-            />
+            {view === "approvals" ? (
+              <ApprovalDetail
+                row={selectedApproval}
+                autoTypes={autoTypes}
+                onToggleAuto={toggleAuto}
+                onConfirm={confirmAction}
+                onOpenThread={openThread}
+              />
+            ) : (
+              <Thread
+                conversation={conversation}
+                guest={inboxGuest}
+                channels={guestThreads}
+                agentOn={agentOn}
+                onToggleAgent={toggleAgent}
+                onSelectChannel={select}
+                onSend={send}
+                onConfirmAction={confirmAction}
+                showTranslation={showTranslation}
+              />
+            )}
           </div>
         </section>
 

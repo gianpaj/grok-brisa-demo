@@ -31,10 +31,7 @@ export function Capabilities() {
         </div>
         <ul className="divide-y divide-line">
           {ITEMS.map((item) => (
-            <li
-              key={item.title}
-              className="grid gap-2 py-6 first:pt-0 sm:grid-cols-[10rem_1fr] sm:gap-8"
-            >
+            <li key={item.title} className="grid gap-2 py-6 first:pt-0 sm:grid-cols-[10rem_1fr] sm:gap-8">
               <h3 className="font-display text-xl font-medium">{item.title}</h3>
               <p className="text-[0.95rem] leading-relaxed text-muted">{item.body}</p>
             </li>

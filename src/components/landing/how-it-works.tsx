@@ -1,3 +1,4 @@
+
 const STEPS = [
   {
     n: "01",
@@ -35,7 +36,10 @@ export function HowItWorks() {
         ))}
       </ol>
       <p className="mt-12">
-        <a href="/demo" className="text-sm font-medium text-primary transition-colors hover:text-fg">
+        <a
+          href="/demo"
+          className="text-sm font-medium text-primary transition-colors hover:text-fg"
+        >
           Open the desk
         </a>
       </p>

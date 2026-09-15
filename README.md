@@ -8,7 +8,12 @@ Built with Grok (xAI App Builder). Light linen palette, Mediterranean photograph
 
 - **Hero conversation** — scripted booking call with canvas waveform (idle / guest / Brisa states)
 - **Talk to Brisa** — type or use the mic; local demo replies (no API key required in this export)
-- **Desk (`/demo`)** — Casa Luz front office: voice, SMS, iMessage, WhatsApp threads; Brisa’s actions (fetch, hold, late checkout); jump in as Clara; Tab / Complete replies; guest file with booking, labels, notes, previous stays
+- **Desk (`/demo`)** — Casa Luz front office
+  - One inbox per guest, all channels (voice, SMS, iMessage, WhatsApp, email, Booking.com)
+  - Agent mode (Brisa handles) vs Clara at the desk
+  - Guest file: booking, extras, labels, notes, previous stays
+  - **Approvals** — request log, who signed, how long it took, gaps, auto-approve
+  - **Languages** — Sophie (French), Marta (Spanish), Jonas (German); sidebar toggle for English; Translate on compose
 - **Product sections** — how it works, what she handles, for hotels
 - **Editorial photography** — terrace, lobby, breeze stills
 
@@ -39,9 +44,9 @@ This is a **frontend demo** of the product surface. The original Grok App Builde
 
 - xAI chat (`grok-4.5`) + TTS (`carina`) for live voice replies
 - TanStack Start, auth, and share-card assets
-- Complete-as-you-type on the desk via Grok
+- Desk Complete / Translate via Grok
 
-Those server paths are not required to explore the UI here. Desk Complete uses house reply snippets locally. Wire your own API if you want real voice again.
+Those server paths are not required to explore the UI here. Desk Complete and Translate use house snippets locally. Wire your own API if you want real voice again.
 
 ## License
 
